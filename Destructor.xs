@@ -6,30 +6,22 @@
 #include "ppport.h"
 #define NEED_mro_get_linear_isa
 #include "mro_compat.h"
+#include "mgx.h"
 
 #ifndef GvSVn
 #define GvSVn(gv) GvSV(gv)
 #endif
 
-#define META     "::Method::Destructor::"
 #define DEMOLISH "DEMOLISH"
 
-SV* meta_key;
-U32 meta_hash;
+#define in_global_destruction() (PL_dirty)
+
+MGVTBL md_meta_vtbl;
 
 enum md_flags{
 	MDf_NONE       = 0x00,
 	MDf_SKIP_DIRTY = 0x01
 };
-
-#define deref_gv(sv) md_deref_gv(aTHX_ sv)
-static GV*
-md_deref_gv(pTHX_ SV* const gvref){
-	if(!(SvROK(gvref) && isGV(SvRV(gvref)))){
-		Perl_croak(aTHX_ "Not a GLOB reference");
-	}
-	return (GV*)SvRV(gvref);
-}
 
 static void
 md_call_demolishall(pTHX_ SV* const self, AV* const demolishall){
@@ -37,11 +29,11 @@ md_call_demolishall(pTHX_ SV* const self, AV* const demolishall){
 	SV** const end = svp + AvFILLp(demolishall) + 1;
 
 	while(svp != end){
-		GV* const demolishgv = deref_gv(*svp);
+		GV* const demolishgv = (GV*)*svp;
 		SV* const sv         = GvSV(demolishgv);
 		IV  const flags      = (sv && SvIOK(sv)) ? SvIVX(sv) : MDf_NONE;
 
-		if(!( (flags & MDf_SKIP_DIRTY) && PL_dirty )){
+		if(!( (flags & MDf_SKIP_DIRTY) && in_global_destruction() )){
 			dSP;
 
 			PUSHMARK(SP);
@@ -63,10 +55,6 @@ XS(XS_Method__Destructor_DESTROY);
 MODULE = Method::Destructor	PACKAGE = Method::Destructor
 
 PROTOTYPES: DISABLE
-
-BOOT:
-	meta_key = newSVpvs(META);
-	PERL_HASH(meta_hash, META, sizeof(META)-1);
 
 void
 import(SV* klass, ...)
@@ -97,30 +85,28 @@ void
 DESTROY(SV* self)
 PREINIT:
 	HV* stash;
-	HE* he;
-	GV* metagv;
+	MAGIC* meta_mg;
 	AV* demolishall;
-	SV* gensv;
+	U16 generation;
 CODE:
 	if(!( SvROK(self) && (stash = SvSTASH(SvRV(self))) )){
 		Perl_croak(aTHX_ "Invalid call of DESTROY");
 	}
 
-	he     = hv_fetch_ent(stash, meta_key, TRUE, meta_hash);
-	metagv = (GV*)HeVAL(he);
+	meta_mg = MgFind((SV*)stash, &md_meta_vtbl);
 
-	if(!isGV(metagv)){
-		gv_init(metagv, stash, META, sizeof(META)-1, GV_ADDMULTI);
-		demolishall = GvAVn(metagv);
-		gensv       = GvSVn(metagv);
-		sv_setuv(gensv, 0U);
+	if(!meta_mg){
+		demolishall = newAV();
+		generation  = 0;
+		meta_mg     = sv_magicext((SV*)stash, (SV*)demolishall, PERL_MAGIC_ext, &md_meta_vtbl, NULL, 0);
+		SvREFCNT_dec(demolishall); /* refcnt++ in sv_magicext() */
 	}
 	else{
-		demolishall = GvAV(metagv);
-		gensv       = GvSV(metagv);
+		demolishall = (AV*)meta_mg->mg_obj;
+		generation  = meta_mg->mg_private;
 	}
 
-	if(SvUV(gensv) != mro_get_gen(stash)){
+	if(generation != (U16)mro_get_gen(stash)){
 		AV*  const isa = mro_get_linear_isa(stash);
 		SV**       svp = AvARRAY(isa);
 		SV** const end = svp + AvFILLp(isa) + 1;
@@ -134,12 +120,14 @@ CODE:
 			GV** const gvp = (GV**)hv_fetchs(st, DEMOLISH, FALSE);
 
 			if(gvp && isGV(*gvp) && GvCVu(*gvp)){
-				av_push(demolishall, newRV_inc((SV*)*gvp));
+				av_push(demolishall, (SV*)*gvp);
+				SvREFCNT_inc_simple_void_NN(*gvp);
 			}
 
 			svp++;
 		}
-		sv_setuv(gensv, mro_get_gen(stash));
+
+		meta_mg->mg_private = (U16)mro_get_gen(stash);
 	}
 
 	if(AvFILLp(demolishall) > -1){

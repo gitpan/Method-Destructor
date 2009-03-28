@@ -39,6 +39,7 @@ Functions:
 #define mro_get_cache_gen(stash) (HvAUX(stash) ? HvAUX(stash)->xhv_mro_meta->cache_gen : (U32)0)
 #endif
 
+/* pkg_gen + cache_gen */
 #ifndef mro_get_gen
 #define mro_get_gen(stash) (HvAUX(stash) ? (HvAUX(stash)->xhv_mro_meta->pkg_gen + HvAUX(stash)->xhv_mro_meta->cache_gen) : (U32)0)
 #endif
@@ -48,7 +49,7 @@ Functions:
 
 #define mro_method_changed_in(stash) ((void)stash, (void)PL_sub_generation++)
 #define mro_get_pkg_gen(stash)   ((void)stash, PL_sub_generation)
-#define mro_get_cache_gen(stash) ((void)stash, PL_sub_generation)
+#define mro_get_cache_gen(stash) ((void)stash, (I32)0) /* ??? */
 #define mro_get_gen(stash)       ((void)stash, PL_sub_generation)
 
 
@@ -60,7 +61,7 @@ extern AV* my_mro_get_linear_isa(pTHX_ HV* const stash);
 #endif /* !NEED_mro_get_linear_isa */
 
 #if defined(NEED_mro_get_linear_isa) || defined(NEED_mro_get_linear_isa_GLOBAL)
-#define ISA_CACHE "::LINEALIZED_ISA_CACHE::"
+#define ISA_CACHE "::Devel::MRO::"
 
 /* call &mro::get_linear_isa, which is actually &MRO::Compat::__get_linear_isa */
 AV*
@@ -70,8 +71,11 @@ my_mro_get_linear_isa(pTHX_ HV* const stash){
 	SV* gen;  /* package generation */
 	CV* get_linear_isa;
 
-	assert(stash != NULL);
+	assert(stash);
 	assert(SvTYPE(stash) == SVt_PVHV);
+	assert(HvNAME(stash));
+
+	/* PerlIO_printf(Perl_debug_log, "mro_get_linear_isa(%s)\n", HvNAME(stash)); //*/
 
 	cachegv = *(GV**)hv_fetchs(stash, ISA_CACHE, TRUE);
 	if(!isGV(cachegv))
@@ -86,10 +90,6 @@ my_mro_get_linear_isa(pTHX_ HV* const stash){
 
 	if(SvIOK(gen) && SvIVX(gen) == (IV)mro_get_pkg_gen(stash)){
 		return isa; /* returns the cache if available */
-	}
-	else{
-		SvREADONLY_off(isa);
-		av_clear(isa);
 	}
 
 	get_linear_isa = get_cv("mro::get_linear_isa", FALSE);
@@ -126,10 +126,14 @@ my_mro_get_linear_isa(pTHX_ HV* const stash){
 			I32 const len = AvFILLp(av) + 1;
 			I32 i;
 
+			SvREADONLY_off(isa);
+			av_fill(isa, len-1);
+
 			for(i = 0; i < len; i++){
-				HV* const st = gv_stashsv(AvARRAY(av)[i], FALSE);
-				if(st)
-					av_push(isa, newSVpv(HvNAME(st), 0));
+				HV* const st = gv_stashsv(AvARRAY(av)[i], TRUE); /* to normalize the stash name */
+				SV* const sv = *av_fetch(isa, i, TRUE);
+
+				sv_setpv(sv, HvNAME(st));
 			}
 			SvREADONLY_on(isa);
 		}

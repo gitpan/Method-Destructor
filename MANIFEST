@@ -3,11 +3,9 @@ benchmark/mouse.pl
 Changes
 Destructor.xs
 example/demo.pl
-inc/ExtUtils/Depends.pm
 inc/Module/Install.pm
 inc/Module/Install/AuthorTests.pm
 inc/Module/Install/Base.pm
-inc/Module/Install/Include.pm
 inc/Module/Install/Makefile.pm
 inc/Module/Install/MakeMaker.pm
 inc/Module/Install/Metadata.pm
@@ -16,6 +14,7 @@ Makefile.PL
 MANIFEST			This list of files
 MANIFEST.SKIP
 META.yml
+mgx.h
 mro_compat.h
 ppport.h
 README
@@ -26,6 +25,7 @@ t/03_optional_skipped.t
 t/04_cache.t
 t/10_with_moose.t
 t/11_with_mouse.t
+t/12_leaktrace.t
 xt/01_podspell.t
 xt/02_pod.t
 xt/03_pod-coverage.t

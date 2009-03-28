@@ -1,9 +1,9 @@
 #!perl -w
 
 use strict;
-use constant HAS_MOOSE => eval{ require Moose };
+use constant HAS_MOOSE => eval{ require Moose; Moose->VERSION(0.72) };
 
-use Test::More HAS_MOOSE ? (tests => 12) : (skip_all => 'require Moose');
+use Test::More HAS_MOOSE ? (tests => 12) : (skip_all => 'require Moose (0.72)');
 
 use constant VERBOSE => !!$ENV{TEST_VERBOSE};
 

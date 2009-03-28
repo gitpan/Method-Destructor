@@ -3,7 +3,7 @@ package Method::Destructor;
 use 5.008_001;
 use strict;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use XSLoader;
 XSLoader::load(__PACKAGE__, $VERSION);
@@ -19,7 +19,7 @@ Method::Destructor - Cumulative destructors
 
 =head1 VERSION
 
-This document describes Method::Destructor version 0.01.
+This document describes Method::Destructor version 0.02.
 
 =head1 SYNOPSIS
 

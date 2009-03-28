@@ -1,9 +1,9 @@
 #!perl -w
 
 use strict;
-use constant HAS_MOUSE => eval{ require Mouse };
+use constant HAS_MOUSE => eval{ require Mouse; Mouse->VERSION(0.16) };
 
-use Test::More HAS_MOUSE ? (tests => 12) : (skip_all => 'require Mouse');
+use Test::More HAS_MOUSE ? (tests => 12) : (skip_all => 'require Mouse (0.16)');
 
 use constant VERBOSE => !!$ENV{TEST_VERBOSE};
 
